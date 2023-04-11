@@ -54,10 +54,10 @@ public isolated class InternationalPatientSourceConnect {
                             return r4:createFHIRError("Requested patient not found.", r4:ERROR, r4:PROCESSING_NOT_FOUND,
                                 httpStatusCode = http:STATUS_OK);
                         }
-                        //parsing json payload to MedinetPatient structure
-                        MedinetPatient medinetPatient = check payload.cloneWithType(MedinetPatient);
-                        //mapping MedinetPatient to AUBasePatient
-                        return medinetPatientToFHIR(medinetPatient);
+                        //parsing json payload to CustomPatient structure
+                        CustomPatient customPatient = check payload.cloneWithType(CustomPatient);
+                        //mapping CustomPatient to AUBasePatient
+                        return customPatientToFHIR(customPatient);
                     } on fail var e {
                         return r4:createInternalFHIRError("Error occurred creating FHIR patient resource.", r4:ERROR,
                                 r4:TRANSIENT_EXCEPTION, cause = e);
@@ -84,10 +84,10 @@ public isolated class InternationalPatientSourceConnect {
                 if payloadArr is json[] {
                     do {
                         foreach json payload in payloadArr {
-                            //parsing json payload to MedinetPatient structure
-                            MedinetPatient medinetPatient = check payload.cloneWithType(MedinetPatient);
-                            //mapping MedinetPatient to AUBasePatient
-                            aubase410:AUBasePatient patient = medinetPatientToFHIR(medinetPatient);
+                            //parsing json payload to CustomPatient structure
+                            CustomPatient customPatient = check payload.cloneWithType(CustomPatient);
+                            //mapping CustomPatient to AUBasePatient
+                            aubase410:AUBasePatient patient = customPatientToFHIR(customPatient);
                             patients.push(patient);
                         }
 

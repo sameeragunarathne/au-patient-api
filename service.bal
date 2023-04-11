@@ -25,9 +25,6 @@ import ballerina/http;
 # public type Patient r4:Patient|r4:USCorePatient;
 public type Patient aubase410:AUBasePatient;
 
-public const FHIR_MIME_TYPE_XML = "application/fhir+xml";
-public const FHIR_MIME_TYPE_JSON = "application/fhir+json";
-
 //add implemented profiles to this map. profileURL:implementation
 isolated final map<PatientSourceConnect> profileImpl = {
     "http://hl7.org.au/fhir/StructureDefinition/au-patient": new InternationalPatientSourceConnect()
@@ -48,7 +45,7 @@ isolated final map<PatientSourceConnect> profileImpl = {
 service / on new http:Listener(9090) {
 
     // Search the resource type based on some filter criteria
-    isolated resource function get fhir/r4/Patient(http:RequestContext ctx, http:Request request) returns @http:Payload {mediaType: [FHIR_MIME_TYPE_JSON, FHIR_MIME_TYPE_XML]} json|xml|r4:FHIRError|error {
+    isolated resource function get fhir/r4/Patient(http:RequestContext ctx, http:Request request) returns @http:Payload {mediaType: ["application/fhir+json", "application/fhir+xml"]} json|xml|r4:FHIRError|error {
 
         r4:FHIRContext fhirContext = check r4:getFHIRContext(ctx);
         r4:RequestSearchParameter[]? & readonly profileUrls = fhirContext.getRequestSearchParameter("_profile");
@@ -68,7 +65,7 @@ service / on new http:Listener(9090) {
     }
 
     // Read the current state of the resource
-    resource function get fhir/r4/Patient/[string id](http:RequestContext ctx) returns @http:Payload {mediaType: [FHIR_MIME_TYPE_JSON, FHIR_MIME_TYPE_XML]} json|xml|r4:FHIRError {
+    resource function get fhir/r4/Patient/[string id](http:RequestContext ctx) returns @http:Payload {mediaType: ["application/fhir+json", "application/fhir+xml"]} json|xml|r4:FHIRError {
 
         r4:FHIRContext fhirContext = check r4:getFHIRContext(ctx);
         r4:FHIRRequest resourceName = <r4:FHIRRequest>fhirContext.getFHIRRequest();
@@ -89,7 +86,7 @@ service / on new http:Listener(9090) {
     }
 
     // Create a new resource with a server assigned id
-    resource function post fhir/r4/Patient(http:RequestContext ctx, http:Request request) returns @http:Payload {mediaType: [FHIR_MIME_TYPE_JSON, FHIR_MIME_TYPE_XML]} json|r4:FHIRError {
+    resource function post fhir/r4/Patient(http:RequestContext ctx, http:Request request) returns @http:Payload {mediaType: ["application/fhir+json", "application/fhir+xml"]} json|r4:FHIRError {
 
         r4:FHIRContext fhirContext = check r4:getFHIRContext(ctx);
         r4:FHIRRequest resourceName = <r4:FHIRRequest>fhirContext.getFHIRRequest();
