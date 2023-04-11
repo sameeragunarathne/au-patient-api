@@ -84,6 +84,7 @@ service / on new http:Listener(9090) {
         return process;
 
     }
+    
     // Create a new resource with a server assigned id
     resource function post fhir/r4/Patient(http:RequestContext ctx, http:Request request) returns @http:Payload {mediaType: [r4:FHIR_MIME_TYPE_JSON, r4:FHIR_MIME_TYPE_XML]} json|r4:FHIRError {
 
