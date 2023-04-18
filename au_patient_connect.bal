@@ -17,6 +17,7 @@
 import wso2healthcare/healthcare.fhir.r4;
 import wso2healthcare/healthcare.fhir.r4.aubase410;
 import ballerina/http;
+import ballerina/log;
 
 configurable string patient_source_url = ?;
 configurable string client_id = ?;
@@ -44,7 +45,7 @@ public isolated class InternationalPatientSourceConnect {
 
     isolated function read(string id, r4:FHIRContext ctx) returns Patient|r4:FHIRError {
 
-        http:Response|http:ClientError response = patientBE->get("/patients/mypractice/" + id);
+        http:Response|http:ClientError response = patientBE->get("/patients/" + id);
         if response is http:Response {
             if response.statusCode == http:STATUS_OK {
                 json|error payload = response.getJsonPayload();
@@ -54,11 +55,12 @@ public isolated class InternationalPatientSourceConnect {
                             return r4:createFHIRError("Requested patient not found.", r4:ERROR, r4:PROCESSING_NOT_FOUND,
                                 httpStatusCode = http:STATUS_OK);
                         }
-                        //parsing json payload to CustomPatient structure
-                        CustomPatient customPatient = check payload.cloneWithType(CustomPatient);
+                        //parsing json payload to Clinical Patient structure
+                        ClinicalPatient clinicalPatient = check payload.cloneWithType(ClinicalPatient);
                         //mapping CustomPatient to AUBasePatient
-                        return customPatientToFHIR(customPatient);
+                        return clinicalPatientToFHIR(clinicalPatient);
                     } on fail var e {
+                        log:printError("Error occurred creating FHIR patient resource.", 'error = e);
                         return r4:createInternalFHIRError("Error occurred creating FHIR patient resource.", r4:ERROR,
                                 r4:TRANSIENT_EXCEPTION, cause = e);
                     }
@@ -69,50 +71,87 @@ public isolated class InternationalPatientSourceConnect {
                 return r4:createInternalFHIRError("Error occurred while fetching data.", r4:ERROR, r4:TRANSIENT_EXCEPTION);
             }
         } else {
+            log:printError("Error occurred while fetching data.", 'error = response);
             return r4:createInternalFHIRError("Error occurred while fetching data.", r4:ERROR, r4:TRANSIENT_EXCEPTION);
         }
     }
 
     isolated function search(map<r4:RequestSearchParameter[]> searchParameters, r4:FHIRContext ctx) returns r4:Bundle|Patient[]|r4:FHIRError {
 
-        aubase410:AUBasePatient[] patients = [];
+        //Implement source system connection here and search for FHIR resources.
+        string queryStr = "";
 
-        http:Response|http:ClientError response = patientBE->get("/patients/main");
+        r4:RequestSearchParameter[]? givenSearchParam = searchParameters["given"];
+        if givenSearchParam is r4:RequestSearchParameter[] {
+            foreach var param in givenSearchParam {
+                queryStr += "firstName=" + param.value + "&";
+            }
+        }
+        r4:RequestSearchParameter[]? familySearchParam = searchParameters["family"];
+        if familySearchParam is r4:RequestSearchParameter[] {
+            foreach var param in familySearchParam {
+                queryStr += "lastName=" + param.value + "&";
+            }
+        }
+        r4:RequestSearchParameter[]? dobSearchParam = searchParameters["birthdate"];
+        if dobSearchParam is r4:RequestSearchParameter[] {
+            foreach var param in dobSearchParam {
+                queryStr += "dob=" + param.value + "&";
+            }
+        }
+        r4:RequestSearchParameter[]? phoneSearchParam = searchParameters["phone"];
+        if phoneSearchParam is r4:RequestSearchParameter[] {
+            foreach var param in phoneSearchParam {
+                queryStr += "mobile=" + param.value + "&";
+            }
+        }
+
+        if queryStr.endsWith("&") {
+            queryStr = queryStr.substring(0, queryStr.length() - 1);
+        }
+
+        http:Response|http:ClientError response = patientBE->get("/patients/searchExtended?" + queryStr);
         if response is http:Response {
             if response.statusCode == http:STATUS_OK {
-                json|error payloadArr = response.getJsonPayload();
-                if payloadArr is json[] {
+                json|error payload = response.getJsonPayload();
+                if payload is json {
                     do {
-                        foreach json payload in payloadArr {
-                            //parsing json payload to CustomPatient structure
-                            CustomPatient customPatient = check payload.cloneWithType(CustomPatient);
-                            //mapping CustomPatient to AUBasePatient
-                            aubase410:AUBasePatient patient = customPatientToFHIR(customPatient);
-                            patients.push(patient);
-                        }
-
+                        ClinicalPatientSearchResponse searchResponse = check payload.cloneWithType(ClinicalPatientSearchResponse);
+                        return clinicalPatientSearchResponseToFHIR(searchResponse);
                     } on fail var e {
-                        return r4:createInternalFHIRError("Error occurred creating FHIR patient resource.", r4:ERROR,
+                        return r4:createInternalFHIRError("Error occurred creating FHIR patient search response.", r4:ERROR,
                                 r4:TRANSIENT_EXCEPTION, cause = e);
                     }
                 } else {
+                    log:printError("Error occurred while extracting json payload.", 'error = payload);
                     return r4:createInternalFHIRError("Error occurred while extracting json payload.", r4:ERROR, r4:TRANSIENT_EXCEPTION);
                 }
             } else {
                 return r4:createInternalFHIRError("Error occurred while fetching data.", r4:ERROR, r4:TRANSIENT_EXCEPTION);
             }
         } else {
+            log:printError("Error occurred while fetching data.", 'error = response);
             return r4:createInternalFHIRError("Error occurred while fetching data.", r4:ERROR, r4:TRANSIENT_EXCEPTION);
         }
-        return patients;
     }
 
     isolated function create(r4:FHIRResourceEntity patient, r4:FHIRContext ctx) returns string|r4:FHIRError {
 
         //Implement source system connection here and persist FHIR resource.
-        //Must respond with ID in order to create Location header
-
-        return r4:createFHIRError("Not implemented.", r4:ERROR, r4:PROCESSING_NOT_SUPPORTED, httpStatusCode = http:STATUS_NOT_IMPLEMENTED);
+        aubase410:AUBasePatient|error payload = patient.unwrap().ensureType(aubase410:AUBasePatient);
+        if payload is aubase410:AUBasePatient {
+            ClinicalPatient clinicalPatient = fhirPatientToClinicalPatient(payload);
+            http:Response|http:ClientError response = patientBE->post("/patients", clinicalPatient);
+            if response is http:ClientError {
+                log:printError("Error occurred while creating patient.", 'error = response);
+                return r4:createFHIRError("Error occurred while creating patient.", r4:ERROR, 
+                    r4:TRANSIENT_EXCEPTION, httpStatusCode = http:STATUS_INTERNAL_SERVER_ERROR);
+            }
+            return "";
+        }
+        log:printError("Error occurred while parsing patient payload.", 'error = payload);
+        return r4:createFHIRError("Error occurred while parsing patient payload.", 
+            r4:ERROR, r4:TRANSIENT_EXCEPTION, httpStatusCode = http:STATUS_INTERNAL_SERVER_ERROR);
     }
 
 }
